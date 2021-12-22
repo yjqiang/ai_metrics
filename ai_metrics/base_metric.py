@@ -5,7 +5,7 @@ from ai_metrics.drivers.base_driver import BaseDriver, BaseElement
 
 
 class BaseMetric:
-    def __init__(self, device, driver: Optional[BaseDriver] = None):
+    def __init__(self, driver: Optional[BaseDriver] = None):
         """
 
         :param driver: 用户可以自定义 driver，如果为 None，则会自动 detect
@@ -13,7 +13,6 @@ class BaseMetric:
         # TODO: auto detect driver
         self.driver = driver
 
-        self.device = device
         self.elements: Dict[str, BaseElement] = {}
 
         self.need_compute_after_every_update = True
@@ -33,9 +32,9 @@ class BaseMetric:
         element = self.driver.create_element(name, value, str_aggregate_function)
         self.add_specific_element(name, element)
 
-    def to(self) -> None:
+    def to(self, device) -> None:
         for element in self.elements.values():
-            self.driver.to_device(element, self.device)
+            self.driver.to_device(element, device)
 
     def sync(self, need_sync: bool) -> None:
         if not need_sync or not self.driver.is_distributed():
