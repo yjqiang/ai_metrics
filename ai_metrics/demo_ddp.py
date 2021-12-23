@@ -8,22 +8,22 @@ import torch.distributed as dist
 import torch.utils.data
 import torch
 
-from ai_metrics.base_metric import BaseMetric
-from ai_metrics.drivers.torch_driver.driver import TorchDriver
+from ai_metrics.metric import Metric
+from ai_metrics.synchronizers.torch_synchronizer.synchronizer import TorchSynchronizer
 
 
 WORLD_SIZE = 2
 torch.set_printoptions(linewidth=200)
 
 
-class MyAccuracy(BaseMetric):
+class MyAccuracy(Metric):
     def __init__(self):
-        super().__init__(driver=TorchDriver())
+        super().__init__(synchronizer=TorchSynchronizer())
 
         self.add_element("correct", value=torch.tensor(0), str_aggregate_function="sum")
         self.add_element("total", value=torch.tensor(0), str_aggregate_function="sum")
 
-    def update(self, predict: torch.Tensor, target: torch.Tensor):
+    def evaluate(self, predict: torch.Tensor, target: torch.Tensor):
         """
 
         :param predict: shape: [n, ]
@@ -35,7 +35,7 @@ class MyAccuracy(BaseMetric):
         self.elements['correct'].value += torch.sum(torch.eq(predict, target))
         self.elements['total'].value += target.numel()
 
-    def compute(self):
+    def get_metric(self):
         return self.elements['correct'].value.to(torch.float64) / self.elements['total'].value
 
 
@@ -175,11 +175,11 @@ def main():
         preds = torch.tensor([3, 1, 3]).to(plugin.root_device)
         target = torch.tensor([3, 1, 0]).to(plugin.root_device)
 
-    acc = accuracy.execute_update(preds, target)
+    acc = accuracy.execute_evaluate(preds, target)
     acc_expected = torch.eq(preds, target).sum().to(torch.float64) / preds.shape[0]
     print(f'RANK: {plugin.local_rank} acc: {acc} acc_expected: {acc_expected}')
 
-    acc = accuracy.execute_compute()
+    acc = accuracy.execute_get_metric()
     print(f'RANK: {plugin.local_rank} acc: {acc} acc_expected: {5 / 6}')
 
     for p in plugin.interactive_ddp_procs:

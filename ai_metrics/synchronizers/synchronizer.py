@@ -1,8 +1,8 @@
-from typing import Any, List
+from typing import Any
 from abc import ABC, abstractmethod
 
 
-class BaseElement:
+class Element:
     """
     设计原因：一个 metric 的计算元素
 
@@ -17,9 +17,9 @@ class BaseElement:
         self.value = value
 
 
-class BaseDriver(ABC):
+class Synchronizer(ABC):
     """
-    详细例子均请见 drivers/torch/driver.py
+    详细例子均请见 synchronizers/torch/synchronizer.py
     """
     @staticmethod
     @abstractmethod
@@ -33,11 +33,11 @@ class BaseDriver(ABC):
 
     @staticmethod
     @abstractmethod
-    def to_device(element: BaseElement, device: Any) -> None:
+    def to_device(element: Element, device: Any) -> None:
         pass
 
     @staticmethod
-    def create_element(name: str, value: Any, str_aggregate_function: str) -> BaseElement:
+    def create_element(name: str, value: Any, str_aggregate_function: str) -> Element:
         pass
 
     @staticmethod

@@ -4,7 +4,7 @@ import torch
 import torch.distributed
 import torch.nn.functional as F
 
-from ai_metrics.drivers.base_driver import BaseDriver, BaseElement
+from ai_metrics.synchronizers.synchronizer import Synchronizer, Element
 
 
 def _simple_gather_all_tensors(result: torch.Tensor, group: Any, world_size: int) -> List[torch.Tensor]:
@@ -13,9 +13,9 @@ def _simple_gather_all_tensors(result: torch.Tensor, group: Any, world_size: int
     return gathered_result
 
 
-class TorchElement(BaseElement):
+class TorchElement(Element):
     """
-    设计原因：一个 metric 的计算元素，这里仅仅是为了方便存储一些东西（例如 'sum' -> dim_zero_sum）以及指明这是属于 torch driver 控制的
+    设计原因：一个 metric 的计算元素，这里仅仅是为了方便存储一些东西（例如 'sum' -> dim_zero_sum）以及指明这是属于 torch synchronizer 控制的
     而 value 不一定是 Tensor 的
 
     """
@@ -31,7 +31,7 @@ class TorchElement(BaseElement):
         self.aggregate_function = aggregate_function
 
 
-class TorchDriver(BaseDriver):
+class TorchSynchronizer(Synchronizer):
     @staticmethod
     def dim_zero_sum(x: torch.Tensor) -> torch.Tensor:
         return torch.sum(x, dim=0)
@@ -96,7 +96,7 @@ class TorchDriver(BaseDriver):
     @staticmethod
     def sync(element: TorchElement) -> None:
         if isinstance(element.value, torch.Tensor):
-            value = TorchDriver._gather_all(element.value)
+            value = TorchSynchronizer._gather_all(element.value)
             if isinstance(value[0], torch.Tensor):
                 value = torch.stack(value)
             element.value = element.aggregate_function(value) if element.aggregate_function is not None else value
@@ -111,7 +111,7 @@ class TorchDriver(BaseDriver):
         :return:
         """
         if str_aggregate_function == "sum":
-            aggregate_function = TorchDriver.dim_zero_sum
+            aggregate_function = TorchSynchronizer.dim_zero_sum
         else:
             aggregate_function = None
         element = TorchElement(name, value, aggregate_function)
