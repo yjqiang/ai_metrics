@@ -15,6 +15,21 @@ class Element:
         """
         self.name = name
         self.value = value
+        self.context = None  # 命名参考：进程“上下文”、中断“上下文”
+
+    def save_before_sync(self) -> None:
+        """
+        用于 sync 和 unsync
+        :return:
+        """
+        self.context = self.value
+
+    def reload_in_unsync(self) -> None:
+        """
+        用于 sync 和 unsync
+        :return:
+        """
+        self.value = self.context
 
 
 class Synchronizer(ABC):
