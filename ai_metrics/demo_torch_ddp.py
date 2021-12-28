@@ -8,35 +8,10 @@ import torch.distributed as dist
 import torch.utils.data
 import torch
 
-from ai_metrics.metric import Metric
-from ai_metrics.synchronizers.torch_synchronizer.synchronizer import TorchSynchronizer
-
+from ai_metrics.metrics.torch_metrics import Accuracy
 
 WORLD_SIZE = 2
 torch.set_printoptions(linewidth=200)
-
-
-class MyAccuracy(Metric):
-    def __init__(self):
-        super().__init__(synchronizer=TorchSynchronizer())
-
-        self.add_element("correct", value=torch.tensor(0), str_aggregate_function="sum")
-        self.add_element("total", value=torch.tensor(0), str_aggregate_function="sum")
-
-    def evaluate(self, predict: torch.Tensor, target: torch.Tensor):
-        """
-
-        :param predict: shape: [n, ]
-        :param target: shape: [n, ]
-        :return:
-        """
-        assert predict.shape == target.shape
-
-        self.elements['correct'].value += torch.sum(torch.eq(predict, target))
-        self.elements['total'].value += target.numel()
-
-    def get_metric(self):
-        return self.elements['correct'].value.to(torch.float64) / self.elements['total'].value
 
 
 class Environment:
@@ -47,6 +22,7 @@ class Environment:
         self._global_rank: int = 0
         self._world_size: int = 1
 
+    @property
     def creates_processes_externally(self) -> bool:
         """Returns whether the cluster creates the processes or not.
         If at least :code:`LOCAL_RANK` is available as environment variable, Lightning assumes the user acts as the
@@ -88,7 +64,7 @@ class DDP:
         self.node_rank = 0
 
     def setup_environment(self) -> None:
-        if not self.environment.creates_processes_externally():
+        if not self.environment.creates_processes_externally:
             self.call_children_scripts()
 
         self.setup_distributed()
@@ -161,7 +137,7 @@ def main():
     # 创建 DDP 模型进行分布式训练
     torch.cuda.set_device(plugin.environment.local_rank())
 
-    accuracy = MyAccuracy()
+    accuracy = Accuracy()
 
     # torchmetrics/metric.py Metric 继承了 torch.nn.Module，且 metric 是 model 的一个实例的参数，所以在执行 model.to(device) 会执行 metric._apply
     # 里面有 if isinstance(current_val, Tensor): setattr(this, key, fn(current_val))
@@ -181,9 +157,6 @@ def main():
 
     acc = accuracy.execute_get_metric()
     print(f'RANK: {plugin.local_rank} acc: {acc} acc_expected: {5 / 6}')
-
-    for p in plugin.interactive_ddp_procs:
-        p.wait()
 
 
 if __name__ == "__main__":

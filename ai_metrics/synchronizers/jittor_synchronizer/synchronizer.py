@@ -5,9 +5,6 @@ import jittor as jt
 from ai_metrics.synchronizers.synchronizer import Synchronizer, Element
 
 
-jittor_mpi_core = jt.mpi
-
-
 class JittorElement(Element):
     """
     设计原因：一个 metric 的计算元素，这里仅仅是为了方便存储一些东西（例如 'sum' -> dim_zero_sum）以及指明这是属于 torch synchronizer 控制的
