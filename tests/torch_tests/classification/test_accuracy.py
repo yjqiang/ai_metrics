@@ -37,5 +37,6 @@ class TestCases(TestManager):
         return self._test(
             is_ddp=is_ddp,
             dataset=dataset,
-            metric=Accuracy(auto_getmetric_after_evaluate=auto_getmetric_after_evaluate, sync_after_evaluate=sync_after_evaluate),
+            metric_class=Accuracy,
+            metric_kwargs={'auto_getmetric_after_evaluate': auto_getmetric_after_evaluate, 'sync_after_evaluate': sync_after_evaluate},
             sklearn_metric=_sklearn_accuracy)

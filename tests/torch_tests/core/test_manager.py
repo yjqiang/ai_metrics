@@ -1,23 +1,27 @@
 import sys
 import os
 from functools import partial
-from typing import Type, Callable, Union
+from typing import Type, Callable, Union, Dict, Any
+import copy
 
+import pytest
 import numpy as np
 import torch
 import torch.distributed
-from torch.multiprocessing import Pool
+from torch.multiprocessing import Pool, set_start_method
 
 from ai_metrics import Metric
 from tests.torch_tests.core import utils
 from tests.core.dataset import DataSet
 from tests.core.utils import is_allclose
 
-NUM_PROCESSES = 2
 
-MAX_PORT = 8100
-START_PORT = 8088
-CURRENT_PORT = START_PORT
+try:
+    set_start_method("spawn")
+except RuntimeError:
+    pass
+
+NUM_PROCESSES = 2
 
 
 def _assert_allclose(my_result: torch.Tensor, sklearn_result: Union[float, np.ndarray], atol: float = 1e-8) -> None:
@@ -36,7 +40,8 @@ def _test(
         world_size: int,
         device: torch.device,
         dataset: DataSet,
-        metric: Metric,
+        metric_class: Type[Metric],
+        metric_kwargs: Dict[str, Any],
         sklearn_metric: Callable,
         atol: float = 1e-8,
 ) -> None:
@@ -45,19 +50,25 @@ def _test(
     :param local_rank:
     :param world_size:
     :param dataset: predict 的 shape: [num_batches, batch_size, ...]；target 的 shape: [num_batches, batch_size, ...]
-    :param metric:
+    :param metric_class:
+    :param metric_kwargs:
     :param sklearn_metric: 用于对比 assert 判定的 sklearn 函数
     :param device:
     :param atol: https://pytorch.org/docs/stable/generated/torch.allclose.html#torch.allclose 简单来说就是比较两个 Tensor 是否相等时，认为两两元素的差的绝对值小于一个较小的量值（atol+rtol×∣other∣），即可认为相等
     :return:
     """
+
     assert len(dataset.predict) == len(dataset.target)
     num_batches = len(dataset.predict)
 
+    # metric 应该是每个进程有自己的一个 instance，所以在 _test 里面实例化
+    metric = metric_class(**metric_kwargs)
+    # dataset 也类似（每个进程有自己的一个）
+    dataset = copy.deepcopy(dataset)
+
     # move to device
     metric.to(device)
-    dataset.predict = dataset.predict.to(device)
-    dataset.target = dataset.target.to(device)
+    dataset.to(device)
 
     # 把数据拆到每个 GPU 上，有点模仿 DistributedSampler 的感觉，但这里数据单位是一个 batch（即每个 i 取了一个 batch 到自己的 GPU 上）
     for i in range(local_rank, num_batches, world_size):
@@ -86,16 +97,11 @@ def _test(
     _assert_allclose(my_result, sklearn_result, atol=atol)
 
 
-def setup_ddp(rank: int, world_size: int) -> None:
+def setup_ddp(rank: int, world_size: int, master_port: int) -> None:
     """Setup ddp environment."""
-    global CURRENT_PORT
 
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(CURRENT_PORT)
-
-    CURRENT_PORT += 1
-    if CURRENT_PORT > MAX_PORT:
-        CURRENT_PORT = START_PORT
+    os.environ["MASTER_PORT"] = str(master_port)
 
     if torch.distributed.is_available() and sys.platform not in ("win32", "cygwin"):
         torch.distributed.init_process_group("gloo", rank=rank, world_size=world_size)
@@ -112,21 +118,26 @@ class TestManager:
     def setup_class(cls: Type['TestManager']) -> None:
         processes = NUM_PROCESSES
         cls.pool = Pool(processes=processes)
-        cls.pool.starmap(setup_ddp, [(rank, processes) for rank in range(processes)])
+        master_port = utils.find_free_network_port()
+        cls.pool.starmap(setup_ddp, [(rank, processes, master_port) for rank in range(processes)])
 
     @staticmethod
     def teardown_class(cls: Type['TestManager']) -> None:
         cls.pool.close()
         cls.pool.join()
 
-    def _test(self, is_ddp: bool, dataset: DataSet, metric: Metric, sklearn_metric: Callable) -> bool:
+    def _test(self, is_ddp: bool, dataset: DataSet, metric_class: Type[Metric], metric_kwargs: Dict[str, Any], sklearn_metric: Callable) -> bool:
         if is_ddp:
+            if sys.platform == "win32":
+                pytest.skip("DDP not supported on windows")
+
             processes = NUM_PROCESSES
             self.pool.starmap(
                 partial(
                     _test,
                     dataset=dataset,
-                    metric=metric,
+                    metric_class=metric_class,
+                    metric_kwargs=metric_kwargs,
                     sklearn_metric=sklearn_metric,
                 ),
                 [(rank, processes, torch.device(f'cuda:{rank}')) for rank in range(processes)]
@@ -138,7 +149,8 @@ class TestManager:
                 world_size=1,
                 device=device,
                 dataset=dataset,
-                metric=metric,
+                metric_class=metric_class,
+                metric_kwargs=metric_kwargs,
                 sklearn_metric=sklearn_metric
             )
         return True

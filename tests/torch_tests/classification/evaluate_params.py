@@ -3,7 +3,7 @@ from tests.torch_tests.core.dataset import TensorDataSet
 import torch
 
 
-NUM_BATCHES = 10  # 如果有多个 gpu，尽量可以正好分开
+NUM_BATCHES = 36  # 如果有多个 gpu，尽量可以正好分开
 BATCH_SIZE = 32
 NUM_CLASSES = 5
 

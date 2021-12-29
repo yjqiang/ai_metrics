@@ -1,4 +1,4 @@
-from typing import Union, Tuple
+from typing import Union, Tuple, Any
 
 import torch
 
@@ -31,3 +31,7 @@ class TensorDataSet(DataSet):
             target = self.target[index]
 
         return predict, target
+
+    def to(self, device: torch.device) -> None:
+        self.predict = self.predict.to(device)
+        self.target = self.target.to(device)

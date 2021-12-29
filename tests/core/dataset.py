@@ -24,3 +24,6 @@ class DataSet:
         :return:
         """
         pass
+
+    def to(self, device: Any) -> None:
+        pass
