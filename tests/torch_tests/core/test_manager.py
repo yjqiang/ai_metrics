@@ -58,9 +58,6 @@ def _test(
     :return:
     """
 
-    assert len(dataset.predict) == len(dataset.target)
-    num_batches = len(dataset.predict)
-
     # metric 应该是每个进程有自己的一个 instance，所以在 _test 里面实例化
     metric = metric_class(**metric_kwargs)
     # dataset 也类似（每个进程有自己的一个）
@@ -69,6 +66,9 @@ def _test(
     # move to device
     metric.to(device)
     dataset.to(device)
+
+    assert len(dataset.predict) == len(dataset.target)
+    num_batches = len(dataset.predict)
 
     # 把数据拆到每个 GPU 上，有点模仿 DistributedSampler 的感觉，但这里数据单位是一个 batch（即每个 i 取了一个 batch 到自己的 GPU 上）
     for i in range(local_rank, num_batches, world_size):
