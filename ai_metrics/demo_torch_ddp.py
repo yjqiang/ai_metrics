@@ -138,25 +138,22 @@ def main():
     torch.cuda.set_device(plugin.environment.local_rank())
 
     accuracy = Accuracy()
-
-    # torchmetrics/metric.py Metric 继承了 torch.nn.Module，且 metric 是 model 的一个实例的参数，所以在执行 model.to(device) 会执行 metric._apply
-    # 里面有 if isinstance(current_val, Tensor): setattr(this, key, fn(current_val))
-    # 把数据转为 device 的数据
     accuracy.to(plugin.root_device)
-    if environment.local_rank() == 0:
-        preds = torch.tensor([1, 1, 0]).to(plugin.root_device)
-        target = torch.tensor([1, 1, 0]).to(plugin.root_device)
 
-    else:
-        preds = torch.tensor([3, 1, 3]).to(plugin.root_device)
-        target = torch.tensor([3, 1, 0]).to(plugin.root_device)
+    # shape: [n=2, batch_size] 表示对于每个设备，每个 epoch 有 n/2 次 metric 使用，每次都是一个 batch_size（一共两个设备）
+    predict = torch.tensor([[1, 1, 0], [3, 1, 3]])
+    target = torch.tensor([[1, 1, 0], [3, 1, 0]])
 
-    acc = accuracy.execute_evaluate(preds, target)
-    acc_expected = torch.eq(preds, target).sum().to(torch.float64) / preds.shape[0]
+    using_predict = predict[environment.local_rank()].to(plugin.root_device)
+    using_target = target[environment.local_rank()].to(plugin.root_device)
+
+    acc = accuracy.execute_evaluate(using_predict, using_target)
+    acc_expected = torch.eq(using_predict, using_target).sum().to(torch.float64) / using_predict.shape[0]
     print(f'RANK: {plugin.local_rank} acc: {acc} acc_expected: {acc_expected}')
 
     acc = accuracy.execute_get_metric()
-    print(f'RANK: {plugin.local_rank} acc: {acc} acc_expected: {5 / 6}')
+    acc_expected = torch.eq(predict, target).sum().to(torch.float64) / (target.shape[0] * target.shape[1])
+    print(f'RANK: {plugin.local_rank} acc: {acc} acc_expected: {acc_expected}')
 
 
 if __name__ == "__main__":
