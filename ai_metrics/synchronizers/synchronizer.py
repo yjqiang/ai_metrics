@@ -48,7 +48,7 @@ class Synchronizer(ABC):
 
     @staticmethod
     @abstractmethod
-    def to_device(element: Element, device: Any) -> None:
+    def to(element: Element, device: Any) -> None:
         pass
 
     @staticmethod

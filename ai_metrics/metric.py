@@ -42,7 +42,7 @@ class Metric:
 
     def to(self, device) -> None:
         for element in self.elements.values():
-            self.synchronizer.to_device(element, device)
+            self.synchronizer.to(element, device)
 
     def sync(self, need_sync: bool) -> None:
         if not need_sync or not self.synchronizer.is_distributed():

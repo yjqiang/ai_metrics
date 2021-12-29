@@ -29,7 +29,7 @@ class JittorSynchronizer(Synchronizer):
         return x.mpi_all_reduce('add')
 
     @staticmethod
-    def to_device(element: JittorElement, device: None) -> None:
+    def to(element: JittorElement, device: None) -> None:
         pass
 
     @staticmethod

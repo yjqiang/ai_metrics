@@ -89,7 +89,7 @@ class TorchSynchronizer(Synchronizer):
         return gathered_result
 
     @staticmethod
-    def to_device(element: TorchElement, device: torch.device) -> None:
+    def to(element: TorchElement, device: torch.device) -> None:
         if isinstance(element.value, torch.Tensor):
             element.value = element.value.to(device)
 
