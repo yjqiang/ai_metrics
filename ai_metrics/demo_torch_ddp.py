@@ -137,8 +137,10 @@ def main():
     # 创建 DDP 模型进行分布式训练
     torch.cuda.set_device(plugin.environment.local_rank())
 
-    accuracy = Accuracy()
-    accuracy.to(plugin.root_device)
+    accuracy = Accuracy(need_explicit_to=False)
+
+    # need_explicit_to 为 False，不需要显式 metric.to(device)
+    # accuracy.to(plugin.root_device)
 
     # shape: [n=2, batch_size] 表示对于每个设备，每个 epoch 有 n/2 次 metric 使用，每次都是一个 batch_size（一共两个设备）
     predict = torch.tensor([[1, 1, 0], [3, 1, 3]])
@@ -152,7 +154,7 @@ def main():
     print(f'RANK: {plugin.local_rank} acc: {acc} acc_expected: {acc_expected}')
 
     acc = accuracy.execute_get_metric()
-    acc_expected = torch.eq(predict, target).sum().to(torch.float64) / (target.shape[0] * target.shape[1])
+    acc_expected = torch.eq(predict, target).sum().to(torch.float64) / target.numel()
     print(f'RANK: {plugin.local_rank} acc: {acc} acc_expected: {acc_expected}')
 
 
