@@ -33,6 +33,10 @@ class JittorSynchronizer(Synchronizer):
         pass
 
     @staticmethod
+    def auto_to(element: JittorElement, target: Any) -> None:
+        pass
+
+    @staticmethod
     def sync(element: JittorElement) -> None:
         if isinstance(element.value, jt.Var):
             value = element.value

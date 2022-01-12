@@ -5,13 +5,14 @@ from ai_metrics.synchronizers.synchronizer import Synchronizer, Element
 
 
 class Metric:
-    def __init__(self, synchronizer: Synchronizer, auto_getmetric_after_evaluate: bool = True, sync_after_evaluate: bool = False):
+    def __init__(self, synchronizer: Synchronizer, auto_getmetric_after_evaluate: bool = True, sync_after_evaluate: bool = False, need_explicit_to: bool = False):
         """
 
         :param synchronizer: 用户可以自定义 synchronizer
         :param auto_getmetric_after_evaluate: 在每次执行 execute_evaluate 后，是否需要返回 metric 的计算结果（execute_evaluate 往往仅仅是对一些数值的累计，例如 correct、total）
             置为 True 后，自动额外执行 execute_get_metric 来得到截止到目前为止的结果（例如 accuracy）
         :param sync_after_evaluate: auto_getmetric_after_evaluate 为 True 后，自动额外执行 execute_get_metric 时，是否需要执行同步
+        :param need_explicit_to: 在 torch 中，是否需要显式地执行 metric.to(device) 操作
         """
         self.synchronizer = synchronizer
 
@@ -25,6 +26,8 @@ class Metric:
 
         # 表示是否需要执行还原操作；因为 sync 的判定条件比较多，有这个变量可以方便确定 sync 中是否执行了各设备同步操作，若执行了，需要在 unsync 时候进行恢复操作，复原到未同步状态
         self._did_sync_successfully = False
+
+        self._need_explicit_to = need_explicit_to
 
     def add_specific_element(self, name: str, element: Element) -> None:
         self.elements[name] = element
@@ -41,8 +44,37 @@ class Metric:
         self.add_specific_element(name, element)
 
     def to(self, device) -> None:
-        for element in self.elements.values():
-            self.synchronizer.to(element, device)
+        """
+        用于 torch 中，显式地调用 to device，来把 metric 迁移到某 device 上
+
+        :param device:
+        :return:
+        """
+        if self._need_explicit_to:
+            for element in self.elements.values():
+                self.synchronizer.to(element, device)
+
+    def auto_to(self, element: Element, target: Any) -> None:
+        """
+        用于 torch 中，设置 metric 的 _need_explicit_to 为 False，于是默认情况下，metric 的 elements 都在 cpu 上；
+        传入一个数据在 gpu，使用 auto_to(element, target)，于是该 element 的 value 等，都移动到了 target 所在的 device 上（也包括 dtype）；
+        注意：本 api 是为了替代显式调用 to 而设计的，尽量在使用前保证 target 里面所有的 tensor 类同（dtype、device 等）
+        eg:
+            class Accuracy:
+                def evaluate(self, predict: torch.Tensor, target: torch.Tensor):
+                    correct = torch.sum(torch.eq(predict, target))
+                    self.auto_to(self.elements['correct'], correct)
+                    self.elements['correct'].value += correct
+                    ...
+
+                ...
+
+        :param element:
+        :param target:
+        :return:
+        """
+        if not self._need_explicit_to:
+            self.synchronizer.auto_to(element, target)
 
     def sync(self, need_sync: bool) -> None:
         if not need_sync or not self.synchronizer.is_distributed():

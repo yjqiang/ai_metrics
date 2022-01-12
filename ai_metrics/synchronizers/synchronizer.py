@@ -52,6 +52,11 @@ class Synchronizer(ABC):
         pass
 
     @staticmethod
+    @abstractmethod
+    def auto_to(element: Element, device: Any) -> None:
+        pass
+
+    @staticmethod
     def create_element(name: str, value: Any, str_aggregate_function: str) -> Element:
         pass
 

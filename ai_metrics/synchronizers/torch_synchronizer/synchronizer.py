@@ -5,6 +5,7 @@ import torch.distributed
 import torch.nn.functional as F
 
 from ai_metrics.synchronizers.synchronizer import Synchronizer, Element
+from ai_metrics import utils
 
 
 def _simple_gather_all_tensors(result: torch.Tensor, group: Any, world_size: int) -> List[torch.Tensor]:
@@ -13,22 +14,71 @@ def _simple_gather_all_tensors(result: torch.Tensor, group: Any, world_size: int
     return gathered_result
 
 
+def default_to_function(data: Any, device: torch.device) -> Any:
+    """
+    默认利用 apply_to_collection 对 value 中所有为 torch.Tensor 的元素全部执行 x.to(device) 操作
+
+    :param data:
+    :param device:
+    :return:
+    """
+    return utils.apply_to_collection(data, torch.Tensor, lambda x: x.to(device))
+
+
+def default_auto_to_function(data: Any, target: Any) -> Any:
+    """
+    默认利用 apply_to_collection 对 value 中所有为 torch.Tensor 的元素全部执行 x.to(real_target) 操作
+
+    :param data:
+    :param target:
+    :return:
+    """
+    # target 可能是 List[torch.Tensor]，这时候我们认为里面所有的 torch.Tensor 都是类同的
+    real_target = utils.check_collection(target, torch.Tensor, lambda x: x)
+    # https://pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to
+    # 如果 real_target is None，此时 If dtype is None it is inferred to be self.dtype. 不影响什么结果
+    return utils.apply_to_collection(data, torch.Tensor, lambda x: x.to(real_target))
+
+
 class TorchElement(Element):
     """
     设计原因：一个 metric 的计算元素，这里仅仅是为了方便存储一些东西（例如 'sum' -> dim_zero_sum）以及指明这是属于 torch synchronizer 控制的
     而 value 不一定是 Tensor 的
 
     """
-    def __init__(self, name: str, value: Any, aggregate_function: Callable):
+    def __init__(self, name: str, value: Any, aggregate_function: Callable,
+                 to_function: Callable[[Any, torch.device], Any] = default_to_function, auto_to_function: Callable[[Any, Any], Any] = default_auto_to_function) -> None:
         """
 
-        :param name:
-        :param value: 初始化值：一般为 0
+        :param name: 见基类
+        :param value: 见基类
         :param aggregate_function: torch 情景下，把某元素从所有的 device 进行 gather 操作后，会成为 list[torch.Tensor]，通过 aggregate_function 去把这些数据转为 torch.Tensor（和单设备一致）
+        :param to_function: 对应 Metric(...).to 函数，负责具体执行 to_function(data, device)
+        :param auto_to_function: 对应 Metric(...).auto_to 函数，负责具体执行 auto_to_function(data, target)
         """
         super().__init__(name, value)
 
         self.aggregate_function = aggregate_function
+        self.to_function = to_function
+        self.auto_to_function = auto_to_function
+
+    def to(self, device: torch.device) -> None:
+        """
+        详见初始化时候的相关参数介绍
+
+        :param device:
+        :return:
+        """
+        self.value = self.to_function(self.value, device)
+
+    def auto_to(self, target: Any) -> None:
+        """
+        详见初始化时候的相关参数介绍
+
+        :param target:
+        :return:
+        """
+        self.value = self.auto_to_function(self.value, target)
 
 
 class TorchSynchronizer(Synchronizer):
@@ -90,8 +140,25 @@ class TorchSynchronizer(Synchronizer):
 
     @staticmethod
     def to(element: TorchElement, device: torch.device) -> None:
-        if isinstance(element.value, torch.Tensor):
-            element.value = element.value.to(device)
+        """
+        对应 Metric(...).to 函数
+
+        :param element:
+        :param device:
+        :return:
+        """
+        element.to(device)
+
+    @staticmethod
+    def auto_to(element: TorchElement, target: Any) -> None:
+        """
+        对应 Metric(...).auto_to 函数
+
+        :param element:
+        :param target:
+        :return:
+        """
+        element.auto_to(target)
 
     @staticmethod
     def sync(element: TorchElement) -> None:

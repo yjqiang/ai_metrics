@@ -6,11 +6,12 @@ from ai_metrics.synchronizers.torch_synchronizer.synchronizer import TorchSynchr
 
 
 class Accuracy(Metric):
-    def __init__(self, auto_getmetric_after_evaluate: bool = True, sync_after_evaluate: bool = False):
+    def __init__(self, auto_getmetric_after_evaluate: bool = True, sync_after_evaluate: bool = False, need_explicit_to: bool = False):
         super().__init__(
             synchronizer=TorchSynchronizer(),
             auto_getmetric_after_evaluate=auto_getmetric_after_evaluate,
-            sync_after_evaluate=sync_after_evaluate
+            sync_after_evaluate=sync_after_evaluate,
+            need_explicit_to=need_explicit_to
         )
 
         self.add_element("correct", value=torch.tensor(0), str_aggregate_function="sum")
@@ -24,8 +25,13 @@ class Accuracy(Metric):
         :return:
         """
         assert predict.shape == target.shape
+        correct = torch.sum(torch.eq(predict, target))
 
-        self.elements['correct'].value += torch.sum(torch.eq(predict, target))
+        # 替换显式 to 调用；当然在 need_explicit_to 为 True 时，不管用
+        self.auto_to(self.elements['correct'], correct)
+        self.auto_to(self.elements['total'], correct)
+
+        self.elements['correct'].value += correct
         self.elements['total'].value += target.numel()
 
     def get_metric(self):
