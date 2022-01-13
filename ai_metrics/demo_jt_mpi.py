@@ -18,8 +18,12 @@ def main():
     accuracy.to(None)
 
     # shape: [n=2, batch_size] 表示对于每个设备，每个 epoch 有 n/2 次 metric 使用，每次都是一个 batch_size（一共两个设备）
-    predict = jt.array([[1, 1, 0], [3, 1, 3]])
-    target = jt.array([[1, 1, 0], [3, 1, 0]])
+    predict = jt.array([
+        [1, 2, 1, 1, 1, 2, 2, 1, 2, 2, 1, 2, 0, 0, 1, 2, 2, 0, 0, 1, 0, 0, 1, 1, 1, 2, 2, 0, 2, 1, 2],
+        [1, 2, 0, 2, 1, 2, 0, 1, 2, 0, 0, 0, 1, 0, 1, 0, 1, 0, 2, 2, 1, 2, 0, 0, 1, 0, 2, 2, 2, 1, 1]])
+    target = jt.array([
+        [1, 0, 1, 2, 1, 2, 1, 0, 0, 1, 0, 1, 2, 1, 2, 0, 1, 0, 0, 0, 2, 0, 0, 1, 1, 0, 1, 0, 1, 2, 2],
+        [1, 0, 0, 2, 0, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 1, 1, 1, 0, 2, 2, 1, 2, 1, 0, 2, 1, 1, 2, 2, 0]])
 
     using_predict = predict[jittor_mpi_core.local_rank()]
     using_target = target[jittor_mpi_core.local_rank()]
