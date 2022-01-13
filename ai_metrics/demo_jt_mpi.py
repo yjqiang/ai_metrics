@@ -29,7 +29,7 @@ def main():
     print(f'RANK: {jittor_mpi_core.local_rank()} acc: {acc} acc_expected: {acc_expected}')
 
     acc = accuracy.execute_get_metric()
-    acc_expected = np.sum(predict.data == target.data).item() / (target.data.shape[0] * target.data.shape[1])
+    acc_expected = np.sum(predict.data == target.data).item() / target.numel()
     print(f'RANK: {jittor_mpi_core.local_rank()} acc: {acc} acc_expected: {acc_expected}')
 
 
