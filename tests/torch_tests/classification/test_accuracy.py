@@ -27,16 +27,18 @@ def _sklearn_accuracy(predict: torch.Tensor, target: torch.Tensor) -> float:
     [
         evaluate_params.params_multiclass,
         evaluate_params.params_multiclass,
-    ]*4
+    ]*2
 )
 @pytest.mark.parametrize('is_ddp', [True, False])
 class TestCases(TestManager):
     @pytest.mark.parametrize('auto_getmetric_after_evaluate', [True, False])
     @pytest.mark.parametrize('sync_after_evaluate', [True, False])
-    def test_accuracy_torch(self, is_ddp: bool, dataset: TensorDataSet, auto_getmetric_after_evaluate: bool, sync_after_evaluate: bool) -> bool:
-        return self._test(
+    @pytest.mark.parametrize('need_explicit_to', [True, False])
+    def test_accuracy_torch(self, is_ddp: bool, dataset: TensorDataSet, auto_getmetric_after_evaluate: bool, sync_after_evaluate: bool, need_explicit_to: bool) -> None:
+        self._test(
             is_ddp=is_ddp,
+            need_explicit_to=need_explicit_to,
             dataset=dataset,
             metric_class=Accuracy,
-            metric_kwargs={'auto_getmetric_after_evaluate': auto_getmetric_after_evaluate, 'sync_after_evaluate': sync_after_evaluate},
+            metric_kwargs={'auto_getmetric_after_evaluate': auto_getmetric_after_evaluate, 'sync_after_evaluate': sync_after_evaluate, 'need_explicit_to': need_explicit_to},
             sklearn_metric=_sklearn_accuracy)

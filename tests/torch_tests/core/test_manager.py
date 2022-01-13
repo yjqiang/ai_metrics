@@ -39,6 +39,7 @@ def _test(
         local_rank: int,
         world_size: int,
         device: torch.device,
+        need_explicit_to: bool,
         dataset: DataSet,
         metric_class: Type[Metric],
         metric_kwargs: Dict[str, Any],
@@ -49,11 +50,12 @@ def _test(
 
     :param local_rank:
     :param world_size:
+    :param device:
+    :param need_explicit_to: 在 torch 中，是否需要显式地执行 metric.to(device) 操作
     :param dataset: predict 的 shape: [num_batches, batch_size, ...]；target 的 shape: [num_batches, batch_size, ...]
     :param metric_class:
     :param metric_kwargs:
     :param sklearn_metric: 用于对比 assert 判定的 sklearn 函数
-    :param device:
     :param atol: https://pytorch.org/docs/stable/generated/torch.allclose.html#torch.allclose 简单来说就是比较两个 Tensor 是否相等时，认为两两元素的差的绝对值小于一个较小的量值（atol+rtol×∣other∣），即可认为相等
     :return:
     """
@@ -64,7 +66,8 @@ def _test(
     dataset = copy.deepcopy(dataset)
 
     # move to device
-    metric.to(device)
+    if need_explicit_to:
+        metric.to(device)
     dataset.to(device)
 
     assert len(dataset.predict) == len(dataset.target)
@@ -126,7 +129,7 @@ class TestManager:
         cls.pool.close()
         cls.pool.join()
 
-    def _test(self, is_ddp: bool, dataset: DataSet, metric_class: Type[Metric], metric_kwargs: Dict[str, Any], sklearn_metric: Callable) -> bool:
+    def _test(self, is_ddp: bool, need_explicit_to: bool, dataset: DataSet, metric_class: Type[Metric], metric_kwargs: Dict[str, Any], sklearn_metric: Callable) -> None:
         if is_ddp:
             if sys.platform == "win32":
                 pytest.skip("DDP not supported on windows")
@@ -135,6 +138,7 @@ class TestManager:
             self.pool.starmap(
                 partial(
                     _test,
+                    need_explicit_to=need_explicit_to,
                     dataset=dataset,
                     metric_class=metric_class,
                     metric_kwargs=metric_kwargs,
@@ -148,9 +152,9 @@ class TestManager:
                 local_rank=0,
                 world_size=1,
                 device=device,
+                need_explicit_to=need_explicit_to,
                 dataset=dataset,
                 metric_class=metric_class,
                 metric_kwargs=metric_kwargs,
                 sklearn_metric=sklearn_metric
             )
-        return True
