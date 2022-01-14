@@ -2,6 +2,7 @@ from typing import Callable, Union
 
 import numpy as np
 import jittor as jt
+import pytest
 
 from ai_metrics import Metric
 from tests.jittor_tests.core import utils
@@ -79,12 +80,12 @@ def _test(
 
 class TestManager:
     @staticmethod
-    def _test(is_mpi: bool, dataset: DataSet, metric: Metric, sklearn_metric: Callable) -> bool:
+    def _test(is_mpi: bool, dataset: DataSet, metric: Metric, sklearn_metric: Callable) -> None:
         # mpirun 时测试 is_mpi=True 的情况（`mpirun -np 2 python3.7 -m tests.jittor_tests.classification.test_accuracy`），
         # 单设备时测试另一种（`python3.7 -m tests.jittor_tests.classification.test_accuracy`）
         # 否则 is_mpi 为 False 时，metric 探测到 is_distributed 为 True，自动同步了
         # 反正逻辑比较乱
-        if (is_mpi and utils.is_distributed()) or (not is_mpi and not utils.is_distributed()):
+        if is_mpi == utils.is_distributed():
             _test(
                 local_rank=jittor_mpi_core.local_rank(),
                 world_size=jittor_mpi_core.world_size(),
@@ -92,6 +93,5 @@ class TestManager:
                 metric=metric,
                 sklearn_metric=sklearn_metric
             )
-            return True
-        else:
-            return False
+            return
+        pytest.skip('is_mpi != utils.is_distributed()')
