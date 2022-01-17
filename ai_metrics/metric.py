@@ -43,7 +43,7 @@ class Metric:
         element = self.synchronizer.create_element(name, value, str_aggregate_function)
         self.add_specific_element(name, element)
 
-    def to(self, device) -> None:
+    def to(self, device: Any) -> None:
         """
         用于 torch 中，显式地调用 to device，来把 metric 迁移到某 device 上
 
@@ -52,7 +52,7 @@ class Metric:
         """
         if self._need_explicit_to:
             for element in self.elements.values():
-                self.synchronizer.to(element, device)
+                element.to(device)
 
     def auto_to(self, element: Element, target: Any) -> None:
         """
@@ -74,7 +74,19 @@ class Metric:
         :return:
         """
         if not self._need_explicit_to:
-            self.synchronizer.auto_to(element, target)
+            element.auto_to(target)
+
+    def reset(self) -> None:
+        if self._need_explicit_to:
+            for element in self.elements.values():
+                element.reset()
+                # 用户总不能每次 reset 之后，再搞一次 to 吧，整个生命周期，应该只显示调用一次 to 即可
+                element.to(element.target)
+        else:
+            for element in self.elements.values():
+                element.reset()
+                # 这里不执行 element.auto_to(element.target)
+                # 因为设计 auto_to 就是为了用户不显式调用 to，reset 之后，反正用户再次 execute_evaluate 还会自动 auto_to
 
     def sync(self, need_sync: bool) -> None:
         if not need_sync or not self.synchronizer.is_distributed():

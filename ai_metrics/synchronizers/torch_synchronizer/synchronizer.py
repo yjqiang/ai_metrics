@@ -1,3 +1,4 @@
+import copy
 from typing import List, Optional, Any, Callable
 
 import torch
@@ -40,6 +41,34 @@ def default_auto_to_function(data: Any, target: Any) -> Any:
     return utils.apply_to_collection(data, torch.Tensor, lambda x: x.to(real_target))
 
 
+def default_deepcopy(data: Any) -> Any:
+    """
+    一个默认的 deepcopy 函数 designed for performance
+    设计原因：https://github.com/PyTorchLightning/metrics/pull/163 从该 issue 看，deepcopy 应该和 .detach().clone() 的结果上应该没什么大的区别，但是有性能差距
+    :param data:
+    :return:
+    """
+    wanted_type = torch.Tensor
+    data_type = type(data)
+
+    if isinstance(data, wanted_type):
+        return data.detach().clone()
+
+    # 如果 data 为 Mapping
+    if utils.is_mapping(data):
+        return data_type({key: (value.detach().clone() if isinstance(value, torch.Tensor) else copy.deepcopy(value)) for key, value in data.items()})
+
+    # 如果 data 为 namedtuple
+    if utils.is_namedtuple(data):
+        return data_type(*((element.detach().clone() if isinstance(element, torch.Tensor) else copy.deepcopy(element)) for element in data))
+
+    # 如果 data 为 Sequence
+    if utils.is_sequence(data):
+        return data_type([(element.detach().clone() if isinstance(element, torch.Tensor) else copy.deepcopy(element)) for element in data])
+
+    return copy.deepcopy(data)
+
+
 class TorchElement(Element):
     """
     设计原因：一个 metric 的计算元素，这里仅仅是为了方便存储一些东西（例如 'sum' -> dim_zero_sum）以及指明这是属于 torch synchronizer 控制的
@@ -47,7 +76,9 @@ class TorchElement(Element):
 
     """
     def __init__(self, name: str, value: Any, aggregate_function: Callable,
-                 to_function: Callable[[Any, torch.device], Any] = default_to_function, auto_to_function: Callable[[Any, Any], Any] = default_auto_to_function) -> None:
+                 to_function: Callable[[Any, torch.device], Any] = default_to_function,
+                 auto_to_function: Callable[[Any, Any], Any] = default_auto_to_function,
+                 deepcopy_function: Callable[[Any], Any] = default_deepcopy) -> None:
         """
 
         :param name: 见基类
@@ -56,20 +87,21 @@ class TorchElement(Element):
         :param to_function: 对应 Metric(...).to 函数，负责具体执行 to_function(data, device)
         :param auto_to_function: 对应 Metric(...).auto_to 函数，负责具体执行 auto_to_function(data, target)
         """
-        super().__init__(name, value)
+        super().__init__(name, value, deepcopy_function)
 
         self.aggregate_function = aggregate_function
         self.to_function = to_function
         self.auto_to_function = auto_to_function
 
-    def to(self, device: torch.device) -> None:
+    def to(self, target: torch.device) -> None:
         """
         详见初始化时候的相关参数介绍
 
-        :param device:
+        :param target: 这里使用 target 而不是 device 是为了保证与 auto_to 一致
         :return:
         """
-        self.value = self.to_function(self.value, device)
+        self.value = self.to_function(self.value, target)
+        self.target = target
 
     def auto_to(self, target: Any) -> None:
         """
@@ -82,6 +114,38 @@ class TorchElement(Element):
 
 
 class TorchSynchronizer(Synchronizer):
+    @staticmethod
+    def create_element(name: str, value: Any, str_aggregate_function: str) -> TorchElement:
+        """
+        对标 torchmetrics/metric.py add_state 函数
+        :param name:
+        :param value:
+        :param str_aggregate_function:
+        :return:
+        """
+        if str_aggregate_function == "sum":
+            aggregate_function = TorchSynchronizer.dim_zero_sum
+        else:
+            aggregate_function = None
+        element = TorchElement(name, value, aggregate_function)
+        return element
+
+    @staticmethod
+    def is_distributed() -> bool:
+        """
+        同 torchmetrics 中 jit_distributed_available
+        :return:
+        """
+        return torch.distributed.is_available() and torch.distributed.is_initialized()
+
+    @staticmethod
+    def sync(element: TorchElement) -> None:
+        if isinstance(element.value, torch.Tensor):
+            value = TorchSynchronizer._gather_all(element.value)
+            if isinstance(value[0], torch.Tensor):
+                value = torch.stack(value)
+            element.value = element.aggregate_function(value) if element.aggregate_function is not None else value
+
     @staticmethod
     def dim_zero_sum(x: torch.Tensor) -> torch.Tensor:
         return torch.sum(x, dim=0)
@@ -137,57 +201,3 @@ class TorchSynchronizer(Synchronizer):
             slice_param = [slice(dim_size) for dim_size in item_size]
             gathered_result[idx] = gathered_result[idx][slice_param]
         return gathered_result
-
-    @staticmethod
-    def to(element: TorchElement, device: torch.device) -> None:
-        """
-        对应 Metric(...).to 函数
-
-        :param element:
-        :param device:
-        :return:
-        """
-        element.to(device)
-
-    @staticmethod
-    def auto_to(element: TorchElement, target: Any) -> None:
-        """
-        对应 Metric(...).auto_to 函数
-
-        :param element:
-        :param target:
-        :return:
-        """
-        element.auto_to(target)
-
-    @staticmethod
-    def sync(element: TorchElement) -> None:
-        if isinstance(element.value, torch.Tensor):
-            value = TorchSynchronizer._gather_all(element.value)
-            if isinstance(value[0], torch.Tensor):
-                value = torch.stack(value)
-            element.value = element.aggregate_function(value) if element.aggregate_function is not None else value
-
-    @staticmethod
-    def create_element(name: str, value: Any, str_aggregate_function: str) -> TorchElement:
-        """
-        对标 torchmetrics/metric.py add_state 函数
-        :param name:
-        :param value:
-        :param str_aggregate_function:
-        :return:
-        """
-        if str_aggregate_function == "sum":
-            aggregate_function = TorchSynchronizer.dim_zero_sum
-        else:
-            aggregate_function = None
-        element = TorchElement(name, value, aggregate_function)
-        return element
-
-    @staticmethod
-    def is_distributed() -> bool:
-        """
-        同 torchmetrics 中 jit_distributed_available
-        :return:
-        """
-        return torch.distributed.is_available() and torch.distributed.is_initialized()

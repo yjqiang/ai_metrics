@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 import dataclasses
 
 
-def _is_mapping(instance: Any) -> bool:
+def is_mapping(instance: Any) -> bool:
     """
     data 是否为 Mapping
     https://docs.python.org/3/library/stdtypes.html#mapping-types-dict
@@ -17,7 +17,7 @@ def _is_mapping(instance: Any) -> bool:
     return isinstance(instance, Mapping)
 
 
-def _is_namedtuple(instance: Any) -> bool:
+def is_namedtuple(instance: Any) -> bool:
     """
     如果 data 为 namedtuple，这里怎么判定应该没有定论
     https://bugs.python.org/issue7796
@@ -29,7 +29,7 @@ def _is_namedtuple(instance: Any) -> bool:
     return isinstance(instance, tuple) and hasattr(instance, '_asdict') and hasattr(instance, '_fields')
 
 
-def _is_sequence(instance: Any) -> bool:
+def is_sequence(instance: Any) -> bool:
     """
     如果 data 为 Sequence
     https://stackoverflow.com/a/2937122
@@ -42,7 +42,7 @@ def _is_sequence(instance: Any) -> bool:
     return isinstance(instance, Sequence) and not isinstance(instance, str)
 
 
-def _is_dataclass(instance: Any) -> bool:
+def is_dataclass(instance: Any) -> bool:
     """
     如果 data 为 dataclass
     https://docs.python.org/3/library/dataclasses.html#dataclasses.is_dataclass
@@ -75,15 +75,15 @@ def apply_to_collection(
         return function(data, **kwargs)
 
     # 如果 data 为 Mapping
-    if _is_mapping(data):
+    if is_mapping(data):
         return data_type({key: apply_to_collection(value, wanted_type, function, **kwargs) for key, value in data.items()})
 
     # 如果 data 为 namedtuple
-    if _is_namedtuple(data):
+    if is_namedtuple(data):
         return data_type(*(apply_to_collection(element, wanted_type, function, **kwargs) for element in data))
 
     # 如果 data 为 Sequence
-    if _is_sequence(data):
+    if is_sequence(data):
         return data_type([apply_to_collection(element, wanted_type, function, **kwargs) for element in data])
 
     # 如果 data 为 dataclass
@@ -120,14 +120,14 @@ def check_collection(
         return function(data, **kwargs)
 
     # 如果 data 为 Mapping
-    if _is_mapping(data):
+    if is_mapping(data):
         for value in data.values():
             result = check_collection(value, wanted_type, function, **kwargs)
             if result is not None:
                 return result
 
     # 如果 data 为 namedtuple 或 Sequence
-    elif _is_namedtuple(data) or _is_sequence(data):
+    elif is_namedtuple(data) or is_sequence(data):
         for element in data:
             result = check_collection(element, wanted_type, function, **kwargs)
             if result is not None:
