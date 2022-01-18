@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from contextlib import contextmanager
 from typing import Any, Dict, Generator
 
@@ -125,6 +126,7 @@ class Metric:
 
         self.unsync(need_unsync=self.need_sync)
 
+    @abstractmethod
     def evaluate(self, *args: Any, **kwargs: Any) -> None:
         """
         用户自定义 Metric 的函数，迭代
@@ -148,6 +150,7 @@ class Metric:
             return value
         return None
 
+    @abstractmethod
     def get_metric(self) -> Any:
         """
         用户自定义 Metric 的函数，获取最终结果
